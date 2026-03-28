@@ -27,15 +27,10 @@ defmodule Pique do
   def start(_type, _args) do
 
     smtp_options = Application.get_env(:pique, :smtp_opts, [])
+    callback_module = Application.get_env(:pique, :callback, Pique.Smtp)
 
     children = [
-      %{
-        id: :gen_smtp_server,
-        start: {:gen_smtp_server, :start_link, [
-          Application.get_env(:pique, :callback, Pique.Smtp),
-          [smtp_options]
-        ]}
-      }
+      :gen_smtp_server.child_spec(:gen_smtp_server, callback_module, smtp_options)
     ]
 
     # Check if SSL is configured properly
@@ -49,24 +44,28 @@ defmodule Pique do
   def validate_ssl_options(smtp_options) do
     if Application.get_env(:pique, :auth) == true do
       if !Keyword.has_key?(smtp_options, :protocol) or Keyword.get(smtp_options, :protocol) == :tcp do
-        Logger.error("Pique auth set to true, but protocol needs to be :ssl")
+        Mix.env() != :test &&
+          Logger.error("Pique auth set to true, but protocol needs to be :ssl")
         exit(:shutdown)
       end
 
       if !Keyword.has_key?(smtp_options, :sessionoptions) do
-        Logger.error("Pique auth set to true, but no sessionoptions defined")
+        Mix.env() != :test &&
+          Logger.error("Pique auth set to true, but no sessionoptions defined")
         exit(:shutdown)
       end
 
       options = smtp_options[:sessionoptions]
 
       if !Keyword.has_key?(options, :certfile) do
-        Logger.error("Pique auth set to true, but no certfile specified")
+        Mix.env() != :test &&
+          Logger.error("Pique auth set to true, but no certfile specified")
         exit(:shutdown)
       end
 
       if !Keyword.has_key?(options, :keyfile) do
-        Logger.error("Pique auth set to true, but no keyfile specified")
+        Mix.env() != :test &&
+          Logger.error("Pique auth set to true, but no keyfile specified")
         exit(:shutdown)
       end
 

@@ -10,7 +10,7 @@ defmodule Pique.Smtp do
   @spec init(any, any, any, any) :: {:ok, [...], %{}} | {:stop, :normal, [...]}
   def init(hostname, session_count, _address, _options) do
     if session_count > Application.get_env(:pique, :session_limit, 40) do
-      Logger.warn("SMTP server connection limit exceeded")
+      Logger.warning("SMTP server connection limit exceeded")
       {:stop, :normal, ["421", hostname, " is too busy to accept mail right now"]}
     else
       banner = [hostname, " ESMTP"]
@@ -25,15 +25,9 @@ defmodule Pique.Smtp do
   """
   @spec handle_DATA(any, any, any, map) :: {:error, charlist(), map}
   def handle_DATA(_from, _to, "", state) do
-    {:error, '552 Message too small', state};
+    {:error, ~c"552 Message too small", state}
   end
 
-  @doc """
-  Handles incoming DATA request and passes it off to the defined DATA
-  handler. If the DATA handler returns an `{:ok, state}` then
-  passes the state to the defined send handler. Otherwise returns
-  relevant error messages.
-  """
   @spec handle_DATA(any, any, String.t, map) :: {:ok, String.t, any} | {:error, charlist(), map}
   def handle_DATA(_from, _to, data, state) do
     Logger.info "Received DATA"
@@ -49,7 +43,7 @@ defmodule Pique.Smtp do
             [state]
           )
         {:error, msg} ->
-          {:error, '552 #{String.to_charlist(msg)}', state}
+          {:error, ~c"552 #{msg}", state}
     end
   end
 
@@ -64,7 +58,7 @@ defmodule Pique.Smtp do
     case Application.get_env(:pique, :auth, false) do
       true -> {
         :ok,
-        extensions ++ [{'AUTH', 'PLAIN LOGIN'}, {'STARTTLS', true}],
+        extensions ++ [{~c"AUTH", ~c"PLAIN LOGIN"}, {~c"STARTTLS", true}],
         state
       }
       _ -> {:ok, extensions, state}
@@ -95,7 +89,7 @@ defmodule Pique.Smtp do
         {:ok, from} ->
           {:ok, Map.put(state, :from, from)}
         {:error, msg} ->
-          {:error, '550 #{String.to_charlist(msg)}', state}
+          {:error, ~c"550 #{msg}", state}
     end
   end
 
@@ -124,7 +118,7 @@ defmodule Pique.Smtp do
         {:ok, to} ->
           {:ok, Map.put(state, :rcpt, [to] ++ Map.get(state, :rcpt, []))}
         {:error, msg} ->
-          {:error, '550 #{String.to_charlist(msg)}', state}
+          {:error, ~c"550 #{msg}", state}
     end
   end
 
@@ -135,6 +129,14 @@ defmodule Pique.Smtp do
   def handle_RCPT_extension(extension, state) do
     Logger.info(extension)
     {:ok, state}
+  end
+
+  @doc """
+  Handles STARTTLS request by indicating TLS is not supported.
+  """
+  @spec handle_STARTTLS(map) :: {:error, charlist(), map} | {:ok, map}
+  def handle_STARTTLS(state) do
+    {:error, ~c"454 TLS not available", state}
   end
 
   @doc """
@@ -159,7 +161,7 @@ defmodule Pique.Smtp do
           {:error, [32 | 50 | 53 | 78 | 101 | 111 | 114 | 115 | 116 | 117, ...], any}
   def handle_VRFY(address, state) do
     Logger.info("VRFY for #{address}")
-    {:error, '252 Not sure', state}
+    {:error, ~c"252 Not sure", state}
   end
 
   @doc """
@@ -177,17 +179,15 @@ defmodule Pique.Smtp do
         {:ok, _} ->
           {:ok, state}
         {:error, msg} ->
-          {:error, '530 #{String.to_charlist(msg)}', state}
+          {:error, ~c"530 #{msg}", state}
     end
   end
 
-  @doc """
-  Handles incoming AUTH request that do not use the PLAIN or
-  LOGIN type - looking at you CRAM-MD5. Telling client to use
-  PLAIN or LOGIN.
-  """
+  # Handles incoming AUTH request that do not use the PLAIN or
+  # LOGIN type - looking at you CRAM-MD5. Telling client to use
+  # PLAIN or LOGIN.
   def handle_AUTH(_type, _username, _password, state) do
-    {:error, '530 Use PLAIN or LOGIN', state}
+    {:error, ~c"530 Use PLAIN or LOGIN", state}
   end
 
   @doc """
@@ -197,7 +197,7 @@ defmodule Pique.Smtp do
   @spec handle_other(any, any, any) :: {charlist(), any}
   def handle_other(command, _args, state) do
     Logger.info(command)
-    {'500 Error: command not recognized : #{command}', state}
+    {~c"500 Error: command not recognized : #{command}", state}
   end
 
   @doc """

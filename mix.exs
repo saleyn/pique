@@ -35,7 +35,7 @@ defmodule Pique.MixProject do
   defp deps do
     [
       {:ex_doc, "~> 0.21", only: :dev, runtime: false},
-      {:gen_smtp, "~> 0.15.0"}
+      {:gen_smtp, "~> 1.3.0"}
     ]
   end
 

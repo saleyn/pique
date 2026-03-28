@@ -35,7 +35,7 @@ defmodule SmtpTest do
     test "returns an error is the message is empty" do
       assert Smtp.handle_DATA("foo", "bar", "", :state) == {
         :error,
-        '552 Message too small',
+        ~c"552 Message too small",
         :state
       }
     end
@@ -44,7 +44,7 @@ defmodule SmtpTest do
       Application.put_env(:pique, :data_handler, Pique.TestHandlers.DataFail)
       assert Smtp.handle_DATA("foo", "bar", "foo", %{}) == {
         :error,
-        '552 Failed to pass DATA handler',
+        ~c"552 Failed to pass DATA handler",
         %{body: "foo"}
       }
       Application.delete_env(:pique, :data_handler)
@@ -55,7 +55,7 @@ defmodule SmtpTest do
       Application.put_env(:pique, :sender, Pique.TestSenders.TestFail)
       assert Smtp.handle_DATA("foo", "bar", "foo", %{}) == {
         :error,
-        '552 Failed to pass Sender',
+        ~c"552 Failed to pass Sender",
         %{body: "foo"}
       }
       Application.delete_env(:pique, :data_handler)
@@ -77,18 +77,18 @@ defmodule SmtpTest do
 
   describe "handle_EHLO" do
     test "it returns all the non auth extensions by default" do
-      assert Smtp.handle_EHLO("foo", [{'FOO', 'BAR'}], :state) == {
+      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], :state) == {
         :ok,
-        [{'FOO', 'BAR'}],
+        [{~c"FOO", ~c"BAR"}],
         :state
       }
     end
 
     test "it add auth extensions if auth config is set to true" do
       Application.put_env(:pique, :auth, true)
-      assert Smtp.handle_EHLO("foo", [{'FOO', 'BAR'}], :state) == {
+      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], :state) == {
         :ok,
-        [{'FOO', 'BAR'}, {'AUTH', 'PLAIN LOGIN'}, {'STARTTLS', true}],
+        [{~c"FOO", ~c"BAR"}, {~c"AUTH", ~c"PLAIN LOGIN"}, {~c"STARTTLS", true}],
         :state
       }
       Application.delete_env(:pique, :auth)
@@ -110,7 +110,7 @@ defmodule SmtpTest do
       Application.put_env(:pique, :mail_handler, Pique.TestHandlers.MailFail)
       assert Smtp.handle_MAIL("foo", :state) == {
         :error,
-        '550 Failed to pass MAIL handler',
+        ~c"550 Failed to pass MAIL handler",
         :state
       }
       Application.delete_env(:pique, :mail_handler)
@@ -137,7 +137,7 @@ defmodule SmtpTest do
       Application.put_env(:pique, :rcpt_handler, Pique.TestHandlers.RcptFail)
       assert Smtp.handle_RCPT("foo", :state) == {
         :error,
-        '550 Failed to pass RCPT handler',
+        ~c"550 Failed to pass RCPT handler",
         :state
       }
       Application.delete_env(:pique, :rcpt_handler)
@@ -184,7 +184,7 @@ defmodule SmtpTest do
     test "returns an error" do
       assert Smtp.handle_VRFY("foo", :state) == {
         :error,
-        '252 Not sure',
+        ~c"252 Not sure",
         :state}
     end
   end
@@ -193,7 +193,7 @@ defmodule SmtpTest do
     test "returns an error if type is not :login or :plain" do
       assert Smtp.handle_AUTH(:foo, "foo", "bar", :state) == {
         :error,
-        '530 Use PLAIN or LOGIN',
+        ~c"530 Use PLAIN or LOGIN",
         :state}
     end
 
@@ -201,7 +201,7 @@ defmodule SmtpTest do
       Application.put_env(:pique, :auth_handler, Pique.TestHandlers.AuthFail)
       assert Smtp.handle_AUTH(:login, "foo", "bar", :state) == {
         :error,
-        '530 Failed to pass AUTH handler',
+        ~c"530 Failed to pass AUTH handler",
         :state}
       Application.delete_env(:pique, :auth_handler)
     end
@@ -218,7 +218,7 @@ defmodule SmtpTest do
   describe "handle_other/3" do
     test "returns an error" do
       assert Smtp.handle_other("foo", [], :state) == {
-        '500 Error: command not recognized : foo',
+        ~c"500 Error: command not recognized : foo",
         :state}
     end
   end
