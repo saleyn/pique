@@ -5,11 +5,14 @@ defmodule SmtpTest do
 
   describe "init/4" do
     test "intializes state and generates a banner if there are enough sessions" do
-      assert Smtp.init("foo", 40, nil, nil) == {
-        :ok,
-        ["foo", " ESMTP"],
-        %{}
-      }
+      {:ok, banner, state} = Smtp.init("foo", 40, nil, nil)
+      assert banner == ["foo", " ESMTP"]
+      assert Map.has_key?(state, :data_handler)
+      assert Map.has_key?(state, :sender)
+      assert Map.has_key?(state, :mail_handler)
+      assert Map.has_key?(state, :rcpt_handler)
+      assert Map.has_key?(state, :auth_handler)
+      assert Map.has_key?(state, :auth_enabled)
     end
 
     test "returns an error is the server connection limit is exceeded" do
@@ -41,57 +44,59 @@ defmodule SmtpTest do
     end
 
     test "returns an error is the DATA handler fails" do
-      Application.put_env(:pique, :data_handler, Pique.TestHandlers.DataFail)
-      assert Smtp.handle_DATA("foo", "bar", "foo", %{}) == {
+      state = %{
+        data_handler: Pique.TestHandlers.DataFail,
+        sender: Pique.TestSenders.TestPass
+      }
+      assert Smtp.handle_DATA("foo", "bar", "foo", state) == {
         :error,
         ~c"552 Failed to pass DATA handler",
-        %{body: "foo"}
+        %{body: "foo", data_handler: Pique.TestHandlers.DataFail, sender: Pique.TestSenders.TestPass}
       }
-      Application.delete_env(:pique, :data_handler)
     end
 
     test "returns an error is the sender fails" do
-      Application.put_env(:pique, :data_handler, Pique.TestHandlers.DataPass)
-      Application.put_env(:pique, :sender, Pique.TestSenders.TestFail)
-      assert Smtp.handle_DATA("foo", "bar", "foo", %{}) == {
+      state = %{
+        data_handler: Pique.TestHandlers.DataPass,
+        sender: Pique.TestSenders.TestFail
+      }
+      assert Smtp.handle_DATA("foo", "bar", "foo", state) == {
         :error,
         ~c"552 Failed to pass Sender",
-        %{body: "foo"}
+        %{body: "foo", data_handler: Pique.TestHandlers.DataPass, sender: Pique.TestSenders.TestFail}
       }
-      Application.delete_env(:pique, :data_handler)
-      Application.delete_env(:pique, :sender)
     end
 
     test "returns an :ok if both handler and sender pass" do
-      Application.put_env(:pique, :data_handler, Pique.TestHandlers.DataPass)
-      Application.put_env(:pique, :sender, Pique.TestSenders.TestPass)
-      assert Smtp.handle_DATA("foo", "bar", "foo", %{}) == {
+      state = %{
+        data_handler: Pique.TestHandlers.DataPass,
+        sender: Pique.TestSenders.TestPass
+      }
+      assert Smtp.handle_DATA("foo", "bar", "foo", state) == {
         :ok,
         "foo",
-        %{body: "foo"}
+        %{body: "foo", data_handler: Pique.TestHandlers.DataPass, sender: Pique.TestSenders.TestPass}
       }
-      Application.delete_env(:pique, :data_handler)
-      Application.delete_env(:pique, :sender)
     end
   end
 
   describe "handle_EHLO" do
     test "it returns all the non auth extensions by default" do
-      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], :state) == {
+      state = %{auth_enabled: false}
+      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], state) == {
         :ok,
         [{~c"FOO", ~c"BAR"}],
-        :state
+        state
       }
     end
 
     test "it add auth extensions if auth config is set to true" do
-      Application.put_env(:pique, :auth, true)
-      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], :state) == {
+      state = %{auth_enabled: true}
+      assert Smtp.handle_EHLO("foo", [{~c"FOO", ~c"BAR"}], state) == {
         :ok,
         [{~c"FOO", ~c"BAR"}, {~c"AUTH", ~c"PLAIN LOGIN"}, {~c"STARTTLS", true}],
-        :state
+        state
       }
-      Application.delete_env(:pique, :auth)
     end
   end
 
@@ -107,22 +112,20 @@ defmodule SmtpTest do
 
   describe "handle_MAIL/2" do
     test "returns an error is the MAIL handler fails" do
-      Application.put_env(:pique, :mail_handler, Pique.TestHandlers.MailFail)
-      assert Smtp.handle_MAIL("foo", :state) == {
+      state = %{mail_handler: Pique.TestHandlers.MailFail}
+      assert Smtp.handle_MAIL("foo", state) == {
         :error,
         ~c"550 Failed to pass MAIL handler",
-        :state
+        state
       }
-      Application.delete_env(:pique, :mail_handler)
     end
 
     test "adds from to the state if MAIL handler passes" do
-      Application.put_env(:pique, :mail_handler, Pique.TestHandlers.MailPass)
-      assert Smtp.handle_MAIL("foo", %{}) == {
+      state = %{mail_handler: Pique.TestHandlers.MailPass}
+      assert Smtp.handle_MAIL("foo", state) == {
         :ok,
-        %{from: "foo"}
+        %{mail_handler: Pique.TestHandlers.MailPass, from: "foo"}
       }
-      Application.delete_env(:pique, :mail_handler)
     end
   end
 
@@ -134,31 +137,28 @@ defmodule SmtpTest do
 
   describe "handle_RCPT/2" do
     test "returns an error is the RCPT handler fails" do
-      Application.put_env(:pique, :rcpt_handler, Pique.TestHandlers.RcptFail)
-      assert Smtp.handle_RCPT("foo", :state) == {
+      state = %{rcpt_handler: Pique.TestHandlers.RcptFail}
+      assert Smtp.handle_RCPT("foo", state) == {
         :error,
         ~c"550 Failed to pass RCPT handler",
-        :state
+        state
       }
-      Application.delete_env(:pique, :rcpt_handler)
     end
 
     test "adds receiver to the state if RCPT handler passes" do
-      Application.put_env(:pique, :rcpt_handler, Pique.TestHandlers.RcptPass)
-      assert Smtp.handle_RCPT("foo", %{}) == {
+      state = %{rcpt_handler: Pique.TestHandlers.RcptPass}
+      assert Smtp.handle_RCPT("foo", state) == {
         :ok,
-        %{rcpt: ["foo"]}
+        %{rcpt_handler: Pique.TestHandlers.RcptPass, rcpt: ["foo"]}
       }
-      Application.delete_env(:pique, :rcpt_handler)
     end
 
     test "adds receiver to the state if RCPT handler passes and there are other recievers" do
-      Application.put_env(:pique, :rcpt_handler, Pique.TestHandlers.RcptPass)
-      assert Smtp.handle_RCPT("bar", %{rcpt: ["foo"]}) == {
+      state = %{rcpt_handler: Pique.TestHandlers.RcptPass, rcpt: ["foo"]}
+      assert Smtp.handle_RCPT("bar", state) == {
         :ok,
-        %{rcpt: ["bar", "foo"]}
+        %{rcpt_handler: Pique.TestHandlers.RcptPass, rcpt: ["bar", "foo"]}
       }
-      Application.delete_env(:pique, :rcpt_handler)
     end
   end
 
@@ -191,27 +191,26 @@ defmodule SmtpTest do
 
   describe "handle_AUTH/4" do
     test "returns an error if type is not :login or :plain" do
-      assert Smtp.handle_AUTH(:foo, "foo", "bar", :state) == {
+      state = %{auth_handler: Pique.TestHandlers.AuthPass}
+      assert Smtp.handle_AUTH(:foo, "foo", "bar", state) == {
         :error,
         ~c"530 Use PLAIN or LOGIN",
-        :state}
+        state}
     end
 
     test "returns an error if it fails the auth handler" do
-      Application.put_env(:pique, :auth_handler, Pique.TestHandlers.AuthFail)
-      assert Smtp.handle_AUTH(:login, "foo", "bar", :state) == {
+      state = %{auth_handler: Pique.TestHandlers.AuthFail}
+      assert Smtp.handle_AUTH(:login, "foo", "bar", state) == {
         :error,
         ~c"530 Failed to pass AUTH handler",
-        :state}
-      Application.delete_env(:pique, :auth_handler)
+        state}
     end
 
     test "returns state if it passes the auth handler" do
-      Application.put_env(:pique, :auth_handler, Pique.TestHandlers.AuthPass)
-      assert Smtp.handle_AUTH(:login, "foo", "bar", :state) == {
+      state = %{auth_handler: Pique.TestHandlers.AuthPass}
+      assert Smtp.handle_AUTH(:login, "foo", "bar", state) == {
         :ok,
-        :state}
-      Application.delete_env(:pique, :auth_handler)
+        state}
     end
   end
 
@@ -231,7 +230,7 @@ defmodule SmtpTest do
 
   describe "terminate/2" do
     test "does not change the state" do
-      assert Smtp.terminate(:foo, :state) == {:ok, :state}
+      assert Smtp.terminate(:foo, :state) == {:ok, :foo, :state}
     end
   end
 

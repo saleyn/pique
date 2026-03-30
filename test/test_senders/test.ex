@@ -2,7 +2,7 @@ defmodule Pique.TestSenders.TestFail do
   @behaviour Pique.Behaviours.Sender
 
   def send(state) do
-    {:error, ~c"552 Failed to pass Sender", state}
+    {:error, "Failed to pass Sender", state}
   end
 end
 
